@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>转盘耦合虚拟仿真实验</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body { font-family: system-ui, -apple-system, "PingFang SC", sans-serif; background: #f4f6f9; color: #333; padding: 10px; overflow-x: hidden; }
+        .container { max-width: 600px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+        .card { background: #fff; border-radius: 10px; padding: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 17px; color: #2c3e50; }
+        .header-right { display: flex; align-items: center; gap: 8px; }
+        .api-hint { font-size: 12px; color: #007bff; cursor: pointer; padding: 4px 8px; border: 1px solid #007bff; border-radius: 6px; white-space: nowrap; }
+        .btn-icon { background: none; border: none; font-size: 20px; padding: 5px; color: #007bff; cursor: pointer; }
+        
+        canvas#simCanvas { width: 100%; height: 220px; background: #eef2f7; border-radius: 8px; display: block; }
+        
+        .steps { display: flex; justify-content: space-between; font-size: 11px; padding: 6px 4px; background: #f8f9fa; border-radius: 6px; margin-bottom: 8px; }
+        .step { flex: 1; text-align: center; color: #aaa; position: relative; }
+        .step.active { color: #007bff; font-weight: bold; }
+        .step.done { color: #28a745; }
+        
+        .formula-tip { text-align: center; font-size: 14px; color: #007bff; cursor: pointer; padding: 10px; border: 1px dashed #007bff; background: #f0f8ff; }
+        .formula-tip:active { background: #e0f0ff; }
+        
+        .prediction-panel { border-left: 4px solid #ffc107; background: #fffbea; }
+        .prediction-panel .q-title { font-size: 13px; color: #856404; font-weight: bold; margin-bottom: 8px; }
+        .prediction-panel .q-text { font-size: 14px; color: #333; margin-bottom: 10px; line-height: 1.6; }
+        .prediction-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; font-size: 14px; }
+        .prediction-row input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+        .prediction-row span { color: #666; white-space: nowrap; font-size: 13px; }
+        .btn-submit { width: 100%; padding: 10px; background: #ffc107; color: #333; border: none; border-radius: 6px; font-weight: bold; font-size: 14px; cursor: pointer; }
+        .btn-submit:disabled { background: #e0e0e0; color: #999; }
+        
+        .data-panel { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 12px; text-align: center; }
+        .data-item span { display: block; font-weight: bold; color: #007bff; font-size: 14px; margin-top: 2px; font-family: "Courier New", monospace; }
+        
+        .control-group { margin-bottom: 12px; }
+        .control-group label { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #555; margin-bottom: 4px; }
+        .control-group label > span:first-child { text-align: left; }
+        .control-group label > span:last-child { text-align: right; font-weight: bold; color: #333; }
+        
+        input[type="range"] { width: 100%; height: 6px; border-radius: 3px; -webkit-appearance: none; background: #ddd; outline: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #007bff; cursor: pointer; box-shadow: 0 2px 4px rgba(0,123,255,0.4); }
+        input[type="range"]:disabled { opacity: 0.5; }
+        input[type="range"]:disabled::-webkit-slider-thumb { background: #999; }
+        
+        .btn-group { display: flex; gap: 8px; margin-top: 12px; }
+        .btn { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; }
+        .btn-primary { background: #007bff; color: #fff; }
+        .btn-primary:disabled { background: #b0c4de; }
+        .btn-secondary { background: #e9ecef; color: #495057; }
+        .btn-success { background: #28a745; color: #fff; }
+        
+        canvas#chartCanvas { width: 100%; height: 240px; display: block; border-radius: 8px; background: #fafbfc; }
+        
+        .ai-panel-wrapper { display: flex; flex-direction: column; gap: 8px; }
+        .ai-panel { max-height: 360px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; -webkit-overflow-scrolling: touch; padding-right: 4px; }
+        .ai-panel::-webkit-scrollbar { width: 4px; }
+        .ai-panel::-webkit-scrollbar-thumb { background: #ccc; border-radius: 2px; }
+        .msg { padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.6; max-width: 85%; word-break: break-word; }
+        .msg.ai { background: #f0f4ff; border-left: 3px solid #007bff; align-self: flex-start; }
+        .msg.user { background: #007bff; color: #fff; align-self: flex-end; }
+        .msg.thinking { color: #888; font-style: italic; }
+        .msg-header { font-size: 11px; color: #888; margin-bottom: 4px; }
+        
+        .chat-input-row { display: flex; gap: 6px; align-items: center; }
+        .chat-input-row input { flex: 1; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; outline: none; }
+        .chat-input-row input:focus { border-color: #007bff; }
+        .chat-input-row button { padding: 10px 16px; background: #007bff; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; }
+        .chat-input-row button:disabled { background: #b0c4de; }
+        
+        .api-status { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 8px; font-size: 12px; cursor: pointer; margin-bottom: 8px; }
+        .api-status.local { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+        .api-status.cloud { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .api-status .arrow { font-size: 14px; }
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 100; }
+        .modal-content { background: #fff; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px; max-height: 85vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .modal-header h3 { font-size: 15px; }
+        .modal-close { background: none; border: none; font-size: 24px; line-height: 1; cursor: pointer; color: #999; }
+        .modal-content p { font-size: 12px; color: #666; margin-bottom: 8px; line-height: 1.5; }
+        .modal-content input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+        
+        .formula-list { font-size: 14px; line-height: 2; color: #222; }
+        .formula-list .formula { font-family: "Times New Roman", "Cambria Math", Georgia, serif; padding: 8px 0; border-bottom: 1px dashed #eee; }
+        .formula-list .formula:last-child { border-bottom: none; }
+        .formula-list .formula b { font-family: inherit; font-style: italic; }
+        .formula-list sub, .formula-list sup { font-size: 0.7em; }
+        .formula-list .frac { display: inline-block; vertical-align: middle; text-align: center; font-size: 0.95em; }
+        .formula-list .frac .num { display: block; border-bottom: 1px solid #333; padding: 0 4px; }
+        .formula-list .frac .den { display: block; padding: 0 4px; }
+        .formula-list .label { color: #888; font-size: 12px; font-style: normal; margin-right: 4px; }
+        
+        .footer { text-align: center; font-size: 11px; color: #aaa; padding: 10px 0; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="card header">
+        <h1>🎯 转盘耦合虚拟仿真实验</h1>
+        <div class="header-right">
+            <span class="api-hint" id="apiHint">输入API Key</span>
+            <button class="btn-icon" id="settingsBtn">⚙️</button>
+        </div>
+    </div>
+
+    <div class="card" style="padding:6px 8px;">
+        <div class="steps">
+            <div class="step active" id="step1">① 调参数</div>
+            <div class="step" id="step2">② 做预测</div>
+            <div class="step" id="step3">③ 看仿真</div>
+            <div class="step" id="step4">④ AI评估</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <canvas id="simCanvas"></canvas>
+    </div>
+
+    <div class="card data-panel">
+        <div class="data-item">I<sub>1</sub> (转盘)<span id="valI1">0.000</span></div>
+        <div class="data-item">I<sub>2</sub> (落盘)<span id="valI2">0.000</span></div>
+        <div class="data-item">ω<sub>1</sub>' (转盘)<span id="valOmega1">0.00</span></div>
+        <div class="data-item">ω<sub>2</sub>' (落盘)<span id="valOmega2">0.00</span></div>
+        <div class="data-item">L (总角动量)<span id="valL">0.000</span></div>
+        <div class="data-item">E<sub>k</sub> (总动能)<span id="valEk">0.000</span></div>
+    </div>
+
+    <div class="card formula-tip" id="formulaTip">
+        📐 公式提示（点击查看）
+    </div>
+
+    <div class="card">
+        <div class="control-group">
+            <label><span>转盘质量 M<sub>1</sub> (kg)</span> <span id="labelM1">1.0</span></label>
+            <input type="range" id="sliderM1" min="0.5" max="5" step="0.1" value="1.0">
+        </div>
+        <div class="control-group">
+            <label><span>转盘半径 R<sub>1</sub> (m)</span> <span id="labelR1">0.50</span></label>
+            <input type="range" id="sliderR1" min="0.1" max="1" step="0.05" value="0.5">
+        </div>
+        <div class="control-group">
+            <label><span>落盘质量 M<sub>2</sub> (kg)</span> <span id="labelM2">1.0</span></label>
+            <input type="range" id="sliderM2" min="0.5" max="5" step="0.1" value="1.0">
+        </div>
+        <div class="control-group">
+            <label><span>落盘半径 R<sub>2</sub> (m)</span> <span id="labelR2">0.50</span></label>
+            <input type="range" id="sliderR2" min="0.1" max="1" step="0.05" value="0.5">
+        </div>
+        <div class="control-group">
+            <label><span>初始角速度 ω<sub>1</sub> (rad/s)</span> <span id="labelOmega1Init">5.0</span></label>
+            <input type="range" id="sliderOmega1Init" min="1" max="10" step="0.5" value="5.0">
+        </div>
+        <div class="control-group">
+            <label><span>耦合速度 k (仅影响过渡时间)</span> <span id="labelK">3.0</span></label>
+            <input type="range" id="sliderK" min="0.5" max="10" step="0.5" value="3.0">
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-success" id="confirmBtn">① 确认参数，进入预测</button>
+        </div>
+    </div>
+
+    <div class="card prediction-panel" id="predictionPanel" style="display:none;">
+        <div class="q-title">📝 第二步：科学预测</div>
+        <div class="q-text" id="questionText"></div>
+        <div class="prediction-row">
+            <span>ω<sub>2</sub> / ω<sub>1</sub> =</span>
+            <input type="number" id="predOmega2" placeholder="例如 0.5" step="0.01">
+        </div>
+        <div class="prediction-row">
+            <span>动能损失率 =</span>
+            <input type="number" id="predLoss" placeholder="例如 50" step="0.1"><span>%</span>
+        </div>
+        <button class="btn-submit" id="submitPrediction">提交预测</button>
+    </div>
+
+    <div class="card" id="simControl" style="display:none;">
+        <div class="btn-group">
+            <button class="btn btn-primary" id="startBtn">③ 释放落盘 (开始仿真)</button>
+            <button class="btn btn-secondary" id="resetBtn">重新开始</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <canvas id="chartCanvas"></canvas>
+    </div>
+
+    <div class="card ai-panel-wrapper">
+        <div class="ai-panel" id="aiPanel">
+            <div class="api-status local" id="apiStatus">
+                <span id="apiStatusText">⚠️ 未设置 API Key（当前使用本地模式）</span>
+                <span class="arrow">›</span>
+            </div>
+            <div class="msg ai">
+                <div class="msg-header">🤖 物理导师</div>
+                <div>欢迎来到转盘耦合实验！<br><br>请先拖动上方滑块调整实验参数（质量、半径、初始角速度）。调整满意后，点击 <b>"① 确认参数，进入预测"</b> 按钮开始实验。<br><br>你也可以在下方输入框随时向我提问关于本实验的物理问题。</div>
+            </div>
+        </div>
+        <div class="chat-input-row">
+            <input type="text" id="chatInput" placeholder="提问：什么是转动惯量？为什么角动量守恒？">
+            <button id="chatSend">发送</button>
+        </div>
+    </div>
+
+    <div class="footer">角动量守恒实验</div>
+</div>
+
+<div class="modal" id="apiModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>⚙️ 设置 DeepSeek API Key</h3>
+            <button class="modal-close" id="closeApiModal">×</button>
+        </div>
+        <p>填写后 AI 将由云端 DeepSeek 驱动。<br>Key 仅保存在你本地浏览器中，<b>不会上传服务器</b>。</p>
+        <p style="color:#888;">获取方式：<a href="https://platform.deepseek.com/" target="_blank">platform.deepseek.com</a></p>
+        <input type="password" id="apiKeyInput" placeholder="sk-...">
+        <div class="btn-group" style="margin-top:8px;">
+            <button class="btn btn-secondary" id="clearApiKey">清除</button>
+            <button class="btn btn-primary" id="saveApiKey">保存</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="formulaModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>📐 物理公式速查</h3>
+            <button class="modal-close" id="closeFormulaModal">×</button>
+        </div>
+        <div class="formula-list">
+            <div class="formula">
+                <span class="label">转动惯量</span>
+                <i>I</i> = <span class="frac"><span class="num">1</span><span class="den">2</span></span> <i>M R</i><sup>2</sup>
+            </div>
+            <div class="formula">
+                <span class="label">角动量</span>
+                <i>L</i> = <i>I ω</i>
+            </div>
+            <div class="formula">
+                <span class="label">角动量守恒</span>
+                <i>I</i><sub>1</sub><i>ω</i><sub>1</sub> = (<i>I</i><sub>1</sub> + <i>I</i><sub>2</sub>) <i>ω</i><sub>2</sub>
+            </div>
+            <div class="formula">
+                <span class="label">末角速度</span>
+                <i>ω</i><sub>2</sub> = <span class="frac"><span class="num"><i>I</i><sub>1</sub></span><span class="den"><i>I</i><sub>1</sub> + <i>I</i><sub>2</sub></span></span> <i>ω</i><sub>1</sub>
+            </div>
+            <div class="formula">
+                <span class="label">动能损失</span>
+                Δ<i>E</i> = <span class="frac"><span class="num">1</span><span class="den">2</span></span> · <span class="frac"><span class="num"><i>I</i><sub>1</sub> <i>I</i><sub>2</sub></span><span class="den"><i>I</i><sub>1</sub> + <i>I</i><sub>2</sub></span></span> <i>ω</i><sub>1</sub><sup>2</sup>
+            </div>
+            <div class="formula">
+                <span class="label">损失率</span>
+                <span class="frac"><span class="num">Δ<i>E</i></span><span class="den"><i>E</i><sub>k1</sub></span></span> =
+                <span class="frac"><span class="num"><i>I</i><sub>2</sub></span><span class="den"><i>I</i><sub>1</sub> + <i>I</i><sub>2</sub></span></span>
+            </div>
+            <div class="formula">
+                <span class="label">过渡段</span>
+                Δ<i>ω</i>(<i>t</i>) = Δ<i>ω</i><sub>0</sub> · <i>e</i><sup>−<i>k t</i></sup>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ============================================================
+    // 全局状态
+    // ============================================================
+    const state = {
+        M1: 1.0, R1: 0.5, M2: 1.0, R2: 0.5, omega1Init: 5.0, k: 3.0,
+        I1: 0.125, I2: 0.125,
+        omega1_prime: 5.0, omega2_prime: 0.0,
+        L0: 0.625, Ek: 1.5625, Ek1: 1.5625,
+        isRunning: false, isFinished: false, time: 0, deltaOmega0: 5.0,
+        angle1: 0, angle2: 0,
+        prediction: null,
+        predictionEvaluated: false,
+        paramsLocked: false,
+        phase: 'adjust',
+        history: { t: [], omega1: [], omega2: [], L: [], Ek: [] },
+        frameCount: 0,
+        lastTimestamp: null,
+        chatHistory: [],
+        chatBusy: false
+    };
+
+    // ============================================================
+    // 1. 物理引擎
+    // ============================================================
+    function computeDerived() {
+        state.I1 = 0.5 * state.M1 * state.R1 * state.R1;
+        state.I2 = 0.5 * state.M2 * state.R2 * state.R2;
+        state.L0 = state.I1 * state.omega1Init;
+        state.deltaOmega0 = state.omega1Init;
+        state.omega1_prime = state.omega1Init;
+        state.omega2_prime = 0;
+        state.Ek1 = 0.5 * state.I1 * state.omega1Init * state.omega1Init;
+        state.Ek = state.Ek1;
+        state.time = 0;
+        state.angle1 = 0;
+        state.angle2 = 0;
+        state.isFinished = false;
+        state.history = { t: [], omega1: [], omega2: [], L: [], Ek: [] };
+        state.frameCount = 0;
+        state.lastTimestamp = null;
+    }
+
+    function theory() {
+        const I1 = state.I1, I2 = state.I2;
+        const omega2 = (I1 / (I1 + I2)) * state.omega1Init;
+        const lossRate = (I2 / (I1 + I2)) * 100;
+        return { omega2, lossRate, ratio: omega2 / state.omega1Init };
+    }
+
+    function updatePhysics(timestamp) {
+        if (!state.isRunning) return;
+
+        if (state.lastTimestamp === null) {
+            state.lastTimestamp = timestamp;
+            requestAnimationFrame(updatePhysics);
+            return;
+        }
+        let dt = (timestamp - state.lastTimestamp) / 1000;
+        state.lastTimestamp = timestamp;
+        if (dt > 0.1) dt = 0.1;
+        if (dt <= 0) dt = 0.016;
+
+        state.time += dt;
+
+        const deltaOmega_t = state.deltaOmega0 * Math.exp(-state.k * state.time);
+        state.omega1_prime = (state.L0 + state.I2 * deltaOmega_t) / (state.I1 + state.I2);
+        state.omega2_prime = (state.L0 - state.I1 * deltaOmega_t) / (state.I1 + state.I2);
+
+        state.Ek = 0.5 * state.I1 * state.omega1_prime * state.omega1_prime
+                 + 0.5 * state.I2 * state.omega2_prime * state.omega2_prime;
+
+        state.angle1 += state.omega1_prime * dt;
+        state.angle2 += state.omega2_prime * dt;
+
+        state.frameCount++;
+        if (state.frameCount % 3 === 0) {
+            state.history.t.push(state.time);
+            state.history.omega1.push(state.omega1_prime);
+            state.history.omega2.push(state.omega2_prime);
+            state.history.L.push(state.I1 * state.omega1_prime + state.I2 * state.omega2_prime);
+            state.history.Ek.push(state.Ek);
+            if (state.history.t.length > 300) {
+                state.history.t.shift();
+                state.history.omega1.shift();
+                state.history.omega2.shift();
+                state.history.L.shift();
+                state.history.Ek.shift();
+            }
+        }
+
+        updateUI();
+        drawSimCanvas();
+        if (state.frameCount % 3 === 0) drawCharts();
+
+        const deltaRatio = Math.abs(deltaOmega_t / state.deltaOmega0);
+        if (deltaRatio < 0.001 || state.time > 12) {
+            state.isRunning = false;
+            state.isFinished = true;
+            state.phase = 'done';
+            document.getElementById('startBtn').textContent = '✅ 仿真结束';
+            document.getElementById('startBtn').disabled = true;
+            updateSteps();
+            drawCharts();
+            onSimulationFinished();
+        } else {
+            requestAnimationFrame(updatePhysics);
+        }
+    }
+
+    // ============================================================
+    // 2. UI 更新与滑块绑定
+    // ============================================================
+    function updateUI() {
+        document.getElementById('valI1').textContent = state.I1.toFixed(3);
+        document.getElementById('valI2').textContent = state.I2.toFixed(3);
+        document.getElementById('valOmega1').textContent = state.omega1_prime.toFixed(2);
+        document.getElementById('valOmega2').textContent = state.omega2_prime.toFixed(2);
+        const L = state.I1 * state.omega1_prime + state.I2 * state.omega2_prime;
+        document.getElementById('valL').textContent = L.toFixed(3);
+        document.getElementById('valEk').textContent = state.Ek.toFixed(3);
+    }
+
+    function bindSlider(id, labelId, key, fixedDigits) {
+        const slider = document.getElementById(id);
+        const label = document.getElementById(labelId);
+        slider.addEventListener('input', (e) => {
+            if (state.paramsLocked) return;
+            const val = parseFloat(e.target.value);
+            label.textContent = val.toFixed(fixedDigits);
+            state[key] = val;
+            computeDerived();
+            updateUI();
+            drawSimCanvas();
+            drawCharts();
+        });
+    }
+
+    bindSlider('sliderM1', 'labelM1', 'M1', 1);
+    bindSlider('sliderR1', 'labelR1', 'R1', 2);
+    bindSlider('sliderM2', 'labelM2', 'M2', 1);
+    bindSlider('sliderR2', 'labelR2', 'R2', 2);
+    bindSlider('sliderOmega1Init', 'labelOmega1Init', 'omega1Init', 1);
+    bindSlider('sliderK', 'labelK', 'k', 1);
+
+    function lockParams() {
+        state.paramsLocked = true;
+        ['sliderM1','sliderR1','sliderM2','sliderR2','sliderOmega1Init','sliderK'].forEach(id => {
+            document.getElementById(id).disabled = true;
+        });
+        document.getElementById('confirmBtn').disabled = true;
+        document.getElementById('confirmBtn').textContent = '✅ 参数已锁定';
+    }
+
+    function unlockParams() {
+        state.paramsLocked = false;
+        ['sliderM1','sliderR1','sliderM2','sliderR2','sliderOmega1Init','sliderK'].forEach(id => {
+            document.getElementById(id).disabled = false;
+        });
+        document.getElementById('confirmBtn').disabled = false;
+        document.getElementById('confirmBtn').textContent = '① 确认参数，进入预测';
+    }
+
+    // ============================================================
+    // 3. 步骤指示器
+    // ============================================================
+    function updateSteps() {
+        const steps = ['step1', 'step2', 'step3', 'step4'];
+        const phaseMap = { adjust: 0, predict: 1, simulate: 2, done: 3 };
+        const cur = phaseMap[state.phase] ?? 0;
+        steps.forEach((id, i) => {
+            const el = document.getElementById(id);
+            el.className = 'step' + (i < cur ? ' done' : '') + (i === cur ? ' active' : '');
+        });
+    }
+
+    // ============================================================
+    // 4. Canvas 双盘渲染
+    // ============================================================
+    const simCanvas = document.getElementById('simCanvas');
+
+    function fitCanvas(canvas) {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        const ctx = canvas.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        return { w: rect.width, h: rect.height, ctx };
+    }
+
+    function drawSimCanvas() {
+        const { w, h, ctx } = fitCanvas(simCanvas);
+        ctx.clearRect(0, 0, w, h);
+
+        ctx.strokeStyle = '#e8edf3';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < w; i += 20) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, h); ctx.stroke(); }
+        for (let i = 0; i < h; i += 20) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(w, i); ctx.stroke(); }
+
+        const cx = w / 2;
+        const cy = h / 2 + 15;
+        const scale = Math.min(w, h) * 0.9;
+
+        const rx1 = state.R1 * scale * 0.8;
+        const ry1 = rx1 * 0.4;
+        const rx2 = state.R2 * scale * 0.8;
+        const ry2 = rx2 * 0.4;
+
+        ctx.beginPath();
+        ctx.ellipse(cx, cy + 12, rx2, ry2, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 123, 255, 0.12)';
+        ctx.fill();
+        ctx.strokeStyle = '#007bff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy + 12);
+        ctx.lineTo(cx + rx2 * Math.cos(state.angle2), cy + 12 + ry2 * Math.sin(state.angle2));
+        ctx.strokeStyle = '#0056b3';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.ellipse(cx, cy - 12, rx1, ry1, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 99, 132, 0.15)';
+        ctx.fill();
+        ctx.strokeStyle = '#ff6384';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - 12);
+        ctx.lineTo(cx + rx1 * Math.cos(state.angle1), cy - 12 + ry1 * Math.sin(state.angle1));
+        ctx.strokeStyle = '#cc0000';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - 45);
+        ctx.lineTo(cx, cy + 45);
+        ctx.strokeStyle = '#888';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        drawArrow(ctx, cx + rx1 + 10, cy - 12, state.omega1_prime * 12, '#cc0000', 'ω1');
+        drawArrow(ctx, cx + rx2 + 10, cy + 12, state.omega2_prime * 12, '#0056b3', 'ω2');
+
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = '#ff6384';
+        ctx.fillText('● 转盘 (初始旋转)', 10, 16);
+        ctx.fillStyle = '#007bff';
+        ctx.fillText('● 落盘 (静止落下)', 10, 30);
+    }
+
+    function drawArrow(ctx, x, y, len, color, label) {
+        if (Math.abs(len) < 1) return;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + len, y);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        const dir = len > 0 ? 1 : -1;
+        ctx.beginPath();
+        ctx.moveTo(x + len, y);
+        ctx.lineTo(x + len - 6 * dir, y - 4);
+        ctx.lineTo(x + len - 6 * dir, y + 4);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.font = '11px sans-serif';
+        ctx.fillText(label, x, y - 8);
+        ctx.restore();
+    }
+
+    // ============================================================
+    // 5. 图表
+    // ============================================================
+    const chartCanvas = document.getElementById('chartCanvas');
+
+    function drawCharts() {
+        const { w, h, ctx } = fitCanvas(chartCanvas);
+        ctx.clearRect(0, 0, w, h);
+        const sectionH = h / 3;
+        drawChartSection(ctx, 0, sectionH, w, 'ω - t', ['ω1\'', 'ω2\''], 
+            [state.history.omega1, state.history.omega2], ['#cc0000', '#0056b3']);
+        drawChartSection(ctx, sectionH, sectionH, w, 'L - t (守恒检验)', ['L'], 
+            [state.history.L], ['#28a745']);
+        drawChartSection(ctx, sectionH * 2, sectionH, w, 'Ek - t', ['Ek'], 
+            [state.history.Ek], ['#ff9800']);
+    }
+
+    function drawChartSection(ctx, y0, height, width, title, labels, series, colors) {
+        const pad = 24;
+        const innerW = width - pad * 2;
+        const innerH = height - 20;
+
+        ctx.fillStyle = '#fafbfc';
+        ctx.fillRect(0, y0, width, height);
+        ctx.strokeStyle = '#e0e5ec';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(pad, y0 + 14, innerW, innerH - 4);
+
+        ctx.font = 'bold 10px sans-serif';
+        ctx.fillStyle = '#333';
+        ctx.fillText(title, 6, y0 + 11);
+
+        let lx = width - pad;
+        for (let i = labels.length - 1; i >= 0; i--) {
+            ctx.font = '9px sans-serif';
+            ctx.fillStyle = colors[i];
+            const textW = ctx.measureText(labels[i]).width;
+            ctx.fillText(labels[i], lx - textW, y0 + 11);
+            lx -= textW + 8;
+        }
+
+        const tArr = state.history.t;
+        if (tArr.length < 2) return;
+
+        let maxVal = 0;
+        for (const s of series) for (const v of s) if (v > maxVal) maxVal = v;
+        if (maxVal < 1e-6) maxVal = 1;
+
+        const tMax = tArr[tArr.length - 1];
+
+        for (let si = 0; si < series.length; si++) {
+            ctx.beginPath();
+            ctx.strokeStyle = colors[si];
+            ctx.lineWidth = 1.5;
+            for (let i = 0; i < tArr.length; i++) {
+                const px = pad + (tArr[i] / tMax) * innerW;
+                const py = y0 + 14 + innerH - 4 - (series[si][i] / maxVal) * (innerH - 8);
+                if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+        }
+
+        ctx.font = '9px sans-serif';
+        ctx.fillStyle = '#888';
+        ctx.fillText(maxVal.toFixed(2), 2, y0 + 18);
+        ctx.fillText('0', 2, y0 + 14 + innerH - 4);
+    }
+
+    // ============================================================
+    // 6. 本地规则引擎（最终修正版）
+    // ============================================================
+    function matchErrorType(predRatio, trueRatio, ratio_energy, ratio_noR2) {
+        const TOL = 0.06;
+        const dTrue = Math.abs(predRatio - trueRatio);
+        const dE = Math.abs(predRatio - ratio_energy);
+        const dR = Math.abs(predRatio - ratio_noR2);
+        
+        if (dTrue <= dE && dTrue <= dR) return 'ratio_wrong';
+
+        const best = Math.min(dE, dR);
+        if (best > TOL) return 'ratio_wrong';
+        return dE <= dR ? 'kinetic_energy_misuse' : 'radius_squared_miss';
+    }
+
+    function evaluateLocal(pred) {
+        const th = theory();
+        const predRatio = pred.omega2;
+        const predLoss = pred.lossRate;
+        const trueRatio = th.ratio;
+        const trueLoss = th.lossRate;
+
+        const ratioTol = 0.08;
+        const lossTol = 5;
+
+        const ratioOK = Math.abs(predRatio - trueRatio) < ratioTol;
+        const lossOK = Math.abs(predLoss - trueLoss) < lossTol;
+
+        const ratio_noR2_corrected = (state.M1 * state.R1) / (state.M1 * state.R1 + state.M2 * state.R2);
+        const ratio_energy = Math.sqrt(state.I1 / (state.I1 + state.I2));
+
+        let errorType = 'correct';
+        let localMsg = '';
+
+        if (ratioOK && lossOK) {
+            errorType = 'correct';
+            localMsg = `✅ 预测正确！理论值 ω₂/ω₁ = ${trueRatio.toFixed(3)}，损失率 = ${trueLoss.toFixed(1)}%。`;
+        } else if (!ratioOK && lossOK) {
+            errorType = matchErrorType(predRatio, trueRatio, ratio_energy, ratio_noR2_corrected);
+            localMsg = `⚠️ 末角速度比例预测偏差较大（你预测 ${predRatio}，理论 ${trueRatio.toFixed(3)}）。动能损失率预测正确。`;
+        } else if (ratioOK && !lossOK) {
+            if (predLoss < trueLoss - 10) {
+                errorType = 'kinetic_loss_miss';
+            } else {
+                errorType = 'loss_wrong';
+            }
+            localMsg = `⚠️ 损失率预测偏差较大（你预测 ${predLoss}%，理论 ${trueLoss.toFixed(1)}%）。末角速度比例预测正确。`;
+        } else {
+            errorType = matchErrorType(predRatio, trueRatio, ratio_energy, ratio_noR2_corrected);
+            localMsg = `⚠️ 两个预测均有偏差。理论值：ω₂/ω₁ = ${trueRatio.toFixed(3)}，损失率 = ${trueLoss.toFixed(1)}%。`;
+        }
+
+        return { errorType, ratioOK, lossOK, trueRatio, trueLoss, localMsg };
+    }
+
+    // ============================================================
+    // 7. DeepSeek API
+    // ============================================================
+    function getApiKey() { return localStorage.getItem('deepseek_api_key') || ''; }
+
+    function updateApiStatus() {
+        const statusEl = document.getElementById('apiStatus');
+        const textEl = document.getElementById('apiStatusText');
+        if (getApiKey()) {
+            statusEl.className = 'api-status cloud';
+            textEl.textContent = '✅ 已连接 DeepSeek AI（点击可修改 Key）';
+        } else {
+            statusEl.className = 'api-status local';
+            textEl.textContent = '⚠️ 未设置 API Key（当前使用本地模式）';
+        }
+    }
+
+    function buildExperimentContext() {
+        const th = theory();
+        return `【当前实验参数】
+- 转盘转动惯量 I₁ = ${state.I1.toFixed(3)} kg·m²，落盘 I₂ = ${state.I2.toFixed(3)} kg·m²
+- 初始角速度 ω₁ = ${state.omega1Init.toFixed(2)} rad/s
+- 理论末角速度 ω₂ = ${th.omega2.toFixed(3)} rad/s，即 ω₂/ω₁ = ${th.ratio.toFixed(3)}
+- 理论动能损失率 = ${th.lossRate.toFixed(1)}%`;
+    }
+
+    function buildEvaluationPrompt(evaluation, pred) {
+        return `你是大学物理实验导师，正在指导"转盘耦合实验"。
+实验原理：角动量守恒 I₁ω₁ = (I₁+I₂)ω₂，但动能不守恒（碰撞有能量损失）。
+
+${buildExperimentContext()}
+
+【学生预测】
+- ω₂/ω₁ = ${pred.omega2}
+- 动能损失率 = ${pred.lossRate}%
+
+【本地规则引擎判定】
+- 判定类型：${evaluation.errorType}
+- 说明：${evaluation.localMsg}
+
+【你的任务】
+1. 如果 errorType === 'correct'：先肯定学生，然后用苏格拉底式提一个进阶问题（例如换为空心圆环 I=MR² 结果会怎样？）。
+2. 如果 errorType 包含 'kinetic_energy_misuse'：学生可能误用了动能守恒。用引导式提问提醒："碰撞过程中是否有能量损失？角动量守恒和动能守恒是两回事哦。"
+3. 如果 errorType 包含 'radius_squared_miss'：提醒学生注意转动惯量 I ∝ R²，半径的影响被平方放大。
+4. 如果 errorType 包含 'kinetic_loss_miss'：提醒学生虽然角动量守恒，但动能会有损失。
+5. 其他错误：给出方向性提示。
+
+【硬性约束】
+- 严禁直接给出 ω₂ 或损失率的数值答案（除非学生已经答对）。
+- 回复控制在 80 字以内，语言通俗易懂。
+- 不要闲聊，不要重复实验数据。`;
+    }
+
+    function buildQAPrompt() {
+        return `你是大学物理实验导师，正在协助学生完成"转盘耦合实验"。
+实验原理：角动量守恒 I₁ω₁ = (I₁+I₂)ω₂，但动能不守恒（两盘耦合的相对滑动会产生内能）。
+
+${buildExperimentContext()}
+
+【回答要求】
+1. 学生可能会问任何关于本实验的物理问题（转动惯量、角动量守恒、能量损失、耦合过程等），请用通俗易懂的语言解答。
+2. 涉及公式时，请用标准数学符号（如 I₁、ω₂、R²），不要口语化。
+3. 回答控制在 150 字以内，避免冗长。
+4. 如果学生问的是超纲内容或与物理无关的内容，礼貌引导回本实验主题。
+5. 不要主动剧透"末角速度预测题"的答案，除非学生已提交预测。`;
+    }
+
+    function getLocalFallback(errorType) {
+        const map = {
+            'correct': '回答正确！角动量守恒但动能不守恒，这是转盘耦合实验的核心结论。想一想：如果换成空心圆环 I=MR²，结果会怎样？',
+            'kinetic_energy_misuse': '注意：碰撞过程中有能量损失，不能用动能守恒。请重新思考：只有哪个物理量守恒？',
+            'radius_squared_miss': '提醒：转动惯量 I = ½MR² 与半径平方成正比，半径的影响被平方放大哦。',
+            'kinetic_loss_miss': '角动量守恒 ≠ 动能守恒。两盘耦合时相对滑动会产生内能，这部分能量去哪了？',
+            'ratio_wrong': '你的角速度比例与理论有偏差。回忆：I₁ω₁ = (I₁+I₂)ω₂，先算 I 再代公式。',
+            'loss_wrong': '损失率计算有偏差。损失率 = I₂/(I₁+I₂)，取决于两个转动惯量的比例。',
+            'all_wrong': '两个预测都有偏差。建议：先算 I₁、I₂，再用角动量守恒求 ω₂，最后比较动能。'
+        };
+        return map[errorType] || map['all_wrong'];
+    }
+
+    function getLocalQAAnswer() {
+        return '（离线模式）我目前只能在你提交预测后给出针对性反馈。若要随时向我提问关于本实验的物理问题，请在右上角设置 DeepSeek API Key。';
+    }
+
+    async function callDeepSeek(messages) {
+        const key = getApiKey();
+        if (!key) throw new Error('NO_KEY');
+
+        const resp = await fetch('https://api.deepseek.com/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${key}`
+            },
+            body: JSON.stringify({
+                model: 'deepseek-chat',
+                messages: messages,
+                temperature: 0.7,
+                max_tokens: 400
+            })
+        });
+
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        return data.choices[0].message.content.trim();
+    }
+
+    async function askAIForEvaluation(evaluation, pred) {
+        const key = getApiKey();
+        if (!key) return { text: getLocalFallback(evaluation.errorType), source: 'local' };
+
+        try {
+            const text = await callDeepSeek([
+                { role: 'system', content: buildEvaluationPrompt(evaluation, pred) },
+                { role: 'user', content: '请根据以上情况给我反馈。' }
+            ]);
+            return { text, source: 'cloud' };
+        } catch (err) {
+            console.warn('DeepSeek 评估调用失败:', err);
+            return { text: getLocalFallback(evaluation.errorType), source: 'local' };
+        }
+    }
+
+    async function askAIForQuestion(question) {
+        const key = getApiKey();
+        if (!key) return { text: getLocalQAAnswer(), source: 'local' };
+
+        try {
+            const messages = [{ role: 'system', content: buildQAPrompt() }];
+            for (const m of state.chatHistory.slice(-8)) {
+                messages.push(m);
+            }
+            messages.push({ role: 'user', content: question });
+
+            const text = await callDeepSeek(messages);
+            return { text, source: 'cloud' };
+        } catch (err) {
+            console.warn('DeepSeek 问答调用失败:', err);
+            return { text: '（网络或 API 异常）暂时无法回答，请稍后再试，或检查 API Key 是否有效。', source: 'local' };
+        }
+    }
+
+    // ============================================================
+    // 8. AI 面板
+    // ============================================================
+    const aiPanel = document.getElementById('aiPanel');
+
+    function pushMessage(role, text) {
+        const div = document.createElement('div');
+        div.className = 'msg ' + role;
+        if (role === 'ai') {
+            div.innerHTML = `<div class="msg-header">🤖 物理导师</div><div>${text}</div>`;
+        } else {
+            div.textContent = text;
+        }
+        aiPanel.appendChild(div);
+        aiPanel.scrollTop = aiPanel.scrollHeight;
+        return div;
+    }
+
+    function pushThinking(text) {
+        const div = document.createElement('div');
+        div.className = 'msg ai thinking';
+        div.textContent = text || 'AI 导师正在思考...';
+        aiPanel.appendChild(div);
+        aiPanel.scrollTop = aiPanel.scrollHeight;
+        return div;
+    }
+
+    // ============================================================
+    // 9. 五步闭环流程
+    // ============================================================
+    document.getElementById('confirmBtn').addEventListener('click', () => {
+        if (state.paramsLocked) return;
+        lockParams();
+        state.phase = 'predict';
+        updateSteps();
+
+        const I1 = state.I1, I2 = state.I2;
+        const qText = `当前参数：I₁ = ${I1.toFixed(3)} kg·m²（转盘），I₂ = ${I2.toFixed(3)} kg·m²（落盘），ω₁ = ${state.omega1Init.toFixed(2)} rad/s。<br><br>请预测：<br>① 末角速度 ω₂ 与初始角速度 ω₁ 的比值 ω₂/ω₁ = ?<br>② 系统动能损失率 = ?（百分比）`;
+        document.getElementById('questionText').innerHTML = qText;
+        document.getElementById('predictionPanel').style.display = '';
+        document.getElementById('simControl').style.display = '';
+
+        pushMessage('ai', `参数已锁定！<br>当前 I₁ = ${I1.toFixed(3)}，I₂ = ${I2.toFixed(3)}。<br>请在黄色面板中填写你的预测，然后点击"提交预测"。`);
+    });
+
+    document.getElementById('submitPrediction').addEventListener('click', () => {
+        const o2 = parseFloat(document.getElementById('predOmega2').value);
+        const lr = parseFloat(document.getElementById('predLoss').value);
+
+        if (isNaN(o2) || isNaN(lr) || o2 <= 0 || lr < 0 || lr > 100) {
+            alert('请输入合理的数值：ω₂/ω₁ > 0，0 ≤ 损失率 ≤ 100');
+            return;
+        }
+
+        state.prediction = { omega2: o2, lossRate: lr };
+        state.predictionEvaluated = true;
+        document.getElementById('submitPrediction').disabled = true;
+        document.getElementById('submitPrediction').textContent = '✅ 预测已提交';
+
+        pushMessage('user', `我的预测：ω₂/ω₁ = ${o2}，损失率 = ${lr}%`);
+        pushMessage('ai', '预测已收到！现在点击"③ 释放落盘"开始仿真，观察真实数据与你的预测是否一致。');
+
+        state.phase = 'simulate';
+        updateSteps();
+    });
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+        if (state.isRunning || state.isFinished) return;
+        if (!state.predictionEvaluated) {
+            alert('请先提交预测！');
+            return;
+        }
+        state.isRunning = true;
+        state.time = 0;
+        state.angle1 = 0;
+        state.angle2 = 0;
+        state.history = { t: [], omega1: [], omega2: [], L: [], Ek: [] };
+        state.frameCount = 0;
+        state.lastTimestamp = null;
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('startBtn').textContent = '仿真中...';
+        requestAnimationFrame(updatePhysics);
+    });
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+        if (state.isRunning) return;
+        state.phase = 'adjust';
+        state.prediction = null;
+        state.predictionEvaluated = false;
+        state.isFinished = false;
+        unlockParams();
+        computeDerived();
+        updateUI();
+        drawSimCanvas();
+        drawCharts();
+        updateSteps();
+        document.getElementById('predictionPanel').style.display = 'none';
+        document.getElementById('simControl').style.display = 'none';
+        document.getElementById('predOmega2').value = '';
+        document.getElementById('predLoss').value = '';
+        document.getElementById('submitPrediction').disabled = false;
+        document.getElementById('submitPrediction').textContent = '提交预测';
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('startBtn').textContent = '③ 释放落盘 (开始仿真)';
+        pushMessage('ai', '已重置。请重新调整参数，开始新一轮实验。');
+    });
+
+    async function onSimulationFinished() {
+        if (!state.prediction) return;
+        state.phase = 'done';
+        updateSteps();
+
+        const evaluation = evaluateLocal(state.prediction);
+        pushMessage('ai', evaluation.localMsg);
+
+        const thinkingEl = pushThinking('AI 导师正在分析你的预测...');
+        const result = await askAIForEvaluation(evaluation, state.prediction);
+        thinkingEl.remove();
+
+        const sourceTag = result.source === 'cloud' ? '' : '（离线模式）';
+        pushMessage('ai', result.text + sourceTag);
+
+        const th = theory();
+        pushMessage('ai', `📖 参考答案：ω₂/ω₁ = ${th.ratio.toFixed(3)}，损失率 = ${th.lossRate.toFixed(1)}%。`);
+    }
+
+    // ============================================================
+    // 10. 自由问答
+    // ============================================================
+    const chatInput = document.getElementById('chatInput');
+    const chatSend = document.getElementById('chatSend');
+
+    async function sendChatMessage() {
+        if (state.chatBusy) return;
+        const q = chatInput.value.trim();
+        if (!q) return;
+
+        state.chatBusy = true;
+        chatInput.value = '';
+        chatSend.disabled = true;
+        chatSend.textContent = '...';
+
+        pushMessage('user', q);
+        state.chatHistory.push({ role: 'user', content: q });
+
+        const thinkingEl = pushThinking('AI 导师正在思考...');
+        const result = await askAIForQuestion(q);
+        thinkingEl.remove();
+
+        const sourceTag = result.source === 'cloud' ? '' : '（离线）';
+        pushMessage('ai', result.text + sourceTag);
+        state.chatHistory.push({ role: 'assistant', content: result.text });
+
+        state.chatBusy = false;
+        chatSend.disabled = false;
+        chatSend.textContent = '发送';
+    }
+
+    chatSend.addEventListener('click', sendChatMessage);
+    chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') sendChatMessage();
+    });
+
+    // ============================================================
+    // 11. API Key 弹窗 & 公式弹窗
+    // ============================================================
+    const apiModal = document.getElementById('apiModal');
+    const formulaModal = document.getElementById('formulaModal');
+    const apiKeyInput = document.getElementById('apiKeyInput');
+    const savedKey = localStorage.getItem('deepseek_api_key');
+    if (savedKey) apiKeyInput.value = savedKey;
+
+    document.getElementById('settingsBtn').addEventListener('click', () => { apiModal.style.display = 'flex'; });
+    document.getElementById('apiHint').addEventListener('click', () => { apiModal.style.display = 'flex'; });
+    document.getElementById('apiStatus').addEventListener('click', () => { apiModal.style.display = 'flex'; });
+    document.getElementById('closeApiModal').addEventListener('click', () => { apiModal.style.display = 'none'; });
+    document.getElementById('saveApiKey').addEventListener('click', () => {
+        localStorage.setItem('deepseek_api_key', apiKeyInput.value.trim());
+        apiModal.style.display = 'none';
+        updateApiStatus();
+        alert('API Key 已保存到本地！');
+    });
+    document.getElementById('clearApiKey').addEventListener('click', () => {
+        localStorage.removeItem('deepseek_api_key');
+        apiKeyInput.value = '';
+        updateApiStatus();
+        alert('API Key 已清除');
+    });
+    apiModal.addEventListener('click', (e) => { if (e.target === apiModal) apiModal.style.display = 'none'; });
+
+    document.getElementById('formulaTip').addEventListener('click', () => { formulaModal.style.display = 'flex'; });
+    document.getElementById('closeFormulaModal').addEventListener('click', () => { formulaModal.style.display = 'none'; });
+    formulaModal.addEventListener('click', (e) => { if (e.target === formulaModal) formulaModal.style.display = 'none'; });
+
+    // ============================================================
+    // 12. 启动初始化
+    // ============================================================
+    function init() {
+        computeDerived();
+        updateUI();
+        drawSimCanvas();
+        drawCharts();
+        updateApiStatus();
+        updateSteps();
+        document.getElementById('predictionPanel').style.display = 'none';
+        document.getElementById('simControl').style.display = 'none';
+    }
+
+    window.addEventListener('resize', () => {
+        drawSimCanvas();
+        drawCharts();
+    });
+
+    init();
+</script>
+</body>
+</html>
