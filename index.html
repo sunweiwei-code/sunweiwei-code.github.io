@@ -919,9 +919,7 @@
     //        0.01%~2.00% → 判对，但要点出偏差，提醒可以算得更准；
     // 判错：> 2.00%
     const JUDGE = { tol: 0.02 };
-    // 判对后追问的那道题（原文只在这里写一次，展示与对话历史共用）
-    const RING_Q = '如果把落盘换成空心圆环（I = MR²，是实心盘的 2 倍），ω₂/ω₁ 和损失率会变大还是变小？';
-    const RING_TRUTH = { ratio: 'down', loss: 'up' };   // I₂ 翻倍 → 比值变小、损失率变大
+    // 判对后追问的那道题见 6.5 节的 FOLLOWUPS（题干、答案、验证路径都集中在那里）
     // 理论值对外只显示到"比值 3 位小数 / 损失率 1 位小数"。
     // 只要学生的数落在显示末位的半个单位以内，就算"完全一致"——
     // 这样多写一位（0.7353 vs 屏幕上的 0.735）不会被反过来判"有偏差"。
@@ -991,11 +989,8 @@
         const pRatio = mine(pred.omega2);
         const pLoss = mine(pred.lossRate);
 
-        // 判对后自动追问一句"空心圆环"，并给一条能在本实验里复现的验证路径：
-        // 圆环 I = MR² 是实心盘的 2 倍，等价于把 M₂ 调成 2 倍（I ∝ M）
-        const followUp = `<br><br><span style="color:#007bff;font-size:12px;line-height:1.7;">`
-            + `💡 追问：${RING_Q}<br>`
-            + `想验证的话：把 M₂ 调成原来的 2 倍（效果和换成圆环一样），点「重新开始」再跑一遍。</span>`;
+        // 判对后自动追问一句"薄壁空心圆环"，答对后再依次追问"空心圆盘（厚环）"和"两盘都换薄壁圆环"
+        const followUp = '<br><br>' + followUpHTML('ring');
 
         let msg = '';
 
@@ -1074,14 +1069,47 @@
     // 7. DeepSeek API
     // ============================================================
     // ============================================================
-    // 6.5 追问判向：学生答"变大/变小/不变"时，先在本地定方向，
-    //     再把结论喂给模型，避免模型"分情况"式地和稀泥、自相矛盾
+    // 6.5 追问链：判对 → 薄壁空心圆环 → 空心圆盘（厚环）→ 两盘都换薄壁圆环
+    //     学生答"变大/变小/不变"时先本地定方向，再把结论喂给模型
     // ============================================================
     const DIR_UP = /变大|增大|升高|上升|提高|增加|更大|更高/;
     const DIR_DOWN = /变小|减小|降低|下降|减少|更小|更低/;
     const DIR_SAME = /不变|一样|相同|保持/;
     const SUBJ_LOSS = /损失率|损失|动能|能量|δe|Δe|ek/;
     const SUBJ_RATIO = /比值|角速度|ω₂\/ω₁|ω2\/ω1|w2\/w1|ω′\/ω|ω′|w′/;
+
+    // 每道追问：题干、正确答案、一句话机理、验证路径、下一问
+    // 链条：薄壁空心圆环 → 空心圆盘（厚环） → 两盘都换薄壁圆环
+    const FOLLOWUPS = {
+        ring: {
+            q: '如果把落盘换成<b>薄壁空心圆环</b>（质量全集中在外圈，I = MR²，是实心盘的 2 倍），ω₂/ω₁ 和损失率会变大还是变小？',
+            truth: { ratio: 'down', loss: 'up' },
+            why: '（薄壁空心圆环的质量全在外圈，I = MR² 是实心盘的 2 倍，I₂ 翻倍）',
+            explain: 'I₂ 翻倍 → I₁/(I₁+I₂) 的分母变大 → 比值变小；损失率 = 1 − ω₂/ω₁，所以随之变大',
+            verify: '想验证的话：把 M₂ 调成原来的 2 倍（效果和换成薄壁圆环一样），点「重新开始」再跑一遍。',
+            answer: '薄壁空心圆环的 I = MR²，同样是实心盘的 2 倍，所以 I₂ 翻倍。ω₂/ω₁ = I₁/(I₁+I₂) 的分母变大，比值<b>变小</b>；损失率 = I₂/(I₁+I₂) 则<b>变大</b>。想亲眼看到的话，把 M₂ 调成 2 倍重跑一次。',
+            next: 'thickDisc'
+        },
+        thickDisc: {
+            q: '再进一步：如果落盘换成<b>空心圆盘</b>（内半径 r、外半径 R 的厚环，I = ½M(R²+r²)），跟刚才的薄壁圆环相比，ω₂/ω₁ 和损失率会变大还是变小？',
+            truth: { ratio: 'up', loss: 'down' },
+            why: '（厚环 I = ½M(R²+r²)，因为 r < R，所以它比薄壁圆环的 MR² 小、比实心盘的 ½MR² 大，取值介于两者之间）',
+            explain: 'I₂ 比薄壁圆环时小 → 分母变小 → 比值回升；损失率 = I₂/(I₁+I₂) 随之变小',
+            verify: '想验证的话：厚环的 I 介于实心盘（1 倍）和薄壁圆环（2 倍）之间，把 M₂ 调成 1.5 倍（相当于 r ≈ 0.7R）就能看到比值回升、损失率下降。',
+            answer: '空心圆盘的质量分布在 r 到 R 之间，I = ½M(R²+r²)，正好夹在实心盘 ½MR² 和薄壁圆环 MR² 之间。同样质量、同样外半径下它比薄壁圆环的 I 小，所以 ω₂/ω₁ = I₁/(I₁+I₂) 的分母变小、比值<b>变大</b>；损失率 = I₂/(I₁+I₂) 则<b>变小</b>。想验证：把 M₂ 调成 1.5 倍重跑一次。',
+            next: 'bothRings'
+        },
+        bothRings: {
+            q: '最后一步：如果转盘和落盘<b>都</b>换成薄壁空心圆环（I = MR²，两个盘的转动惯量同时变成原来的 2 倍），ω₂/ω₁ 和损失率会怎么变？',
+            truth: { ratio: 'same', loss: 'same' },
+            why: '（两个盘的 I 同时翻倍，I₁:I₂ 的比例没变；而两式都只由这个比例决定）',
+            explain: 'I₁、I₂ 同比例放大，ω₂/ω₁ = I₁/(I₁+I₂) 不变，损失率 = I₂/(I₁+I₂) 也不变——结果只取决于两者比例，与 I 的绝对值无关',
+            verify: '想验证的话：把 M₁、M₂ 同时调成 2 倍再跑一遍，比值和损失率都不会变。',
+            answer: '两个盘都换成薄壁空心圆环后，I₁、I₂ 同时变成 2 倍，比例没变，所以 ω₂/ω₁ = I₁/(I₁+I₂) <b>不变</b>、损失率 = I₂/(I₁+I₂) 也<b>不变</b>。这两个结果只取决于两个转动惯量的<b>比值</b>，与绝对值无关。想验证：把 M₁、M₂ 同时调成 2 倍重跑一次。',
+            next: null
+        }
+    };
+    const FU = type => FOLLOWUPS[type] || FOLLOWUPS.ring;
 
     function dirOf(txt) {
         if (DIR_SAME.test(txt)) return 'same';
@@ -1091,8 +1119,9 @@
     }
     const dirName = d => d === 'up' ? '变大' : d === 'down' ? '变小' : d === 'same' ? '不变' : '—';
 
-    // 返回 { ratio, loss, ok } 或 null（看不出方向就不判，交给正常问答）
-    function judgeRingAnswer(text) {
+    // 返回 { ratio, loss, okR, okL } 或 null（看不出方向就不判，交给正常问答）
+    function judgeFollowUp(text, type) {
+        const truth = FU(type).truth;
         const clauses = String(text || '')
             .replace(/\s+/g, '')
             .split(/[，,。；;、！!？?]/)
@@ -1107,20 +1136,24 @@
             else if (hasRatio && !hasLoss) { if (!ratio) ratio = d; }
             // 一句话里两个都提到、或没主语 → 不猜，避免误判
         }
+        if (!ratio && !loss) {
+            // "都/两者/均"这种统称，方向对两问同时成立
+            const flat = String(text || '').replace(/\s+/g, '');
+            const d = dirOf(flat);
+            if (d && /都|均|两者|两个|共同/.test(flat)) { ratio = d; loss = d; }
+        }
         if (!ratio && !loss) return null;
-        const okR = ratio ? ratio === RING_TRUTH.ratio : null;
-        const okL = loss ? loss === RING_TRUTH.loss : null;
+        const okR = ratio ? ratio === truth.ratio : null;
+        const okL = loss ? loss === truth.loss : null;
         return { ratio, loss, okR, okL };
     }
 
-    function buildRingJudgeHTML(j) {
+    function buildFollowJudgeHTML(j, type) {
+        const truth = FU(type).truth;
         const parts = [];
-        if (j.ratio) {
-            parts.push(`ω₂/ω₁：你答「${dirName(j.ratio)}」${j.okR ? ' ✅' : ' ❌ 应为「变小」'}`);
-        }
-        if (j.loss) {
-            parts.push(`损失率：你答「${dirName(j.loss)}」${j.okL ? ' ✅' : ' ❌ 应为「变大」'}`);
-        }
+        if (j.ratio) parts.push(`ω₂/ω₁：你答「${dirName(j.ratio)}」${j.okR ? ' ✅' : ` ❌ 应为「${dirName(truth.ratio)}」`}`);
+        if (j.loss) parts.push(`损失率：你答「${dirName(j.loss)}」${j.okL ? ' ✅' : ` ❌ 应为「${dirName(truth.loss)}」`}`);
+
         const answered = [j.okR, j.okL].filter(v => v !== null);
         const rightCount = answered.filter(Boolean).length;
         const onlyOne = answered.length === 1;
@@ -1134,14 +1167,20 @@
         if (onlyOne) {
             html += `<br><span style="color:#8a6d3b;font-size:12px;">（另一问还没回答：${j.ratio ? '损失率' : 'ω₂/ω₁'} 会怎么变？）</span>`;
         }
-        // 这两句互相矛盾的解释交给下面那段回答讲，这里不再重复一遍
         return html;
     }
 
-    // 判对时挂起追问；学生第一次回答后清掉
-    function armFollowUp() {
-        state.pendingFollowUp = { type: 'ring' };
-        state.chatHistory.push({ role: 'assistant', content: '（追问）' + RING_Q });
+    // 追问题的展示文本
+    function followUpHTML(type) {
+        const f = FU(type);
+        return `<span style="color:#007bff;font-size:12px;line-height:1.7;">💡 追问：${f.q}<br>${f.verify}</span>`;
+    }
+
+    // 挂起一道追问（题干也写进对话历史，模型才知道在回答什么）
+    function armFollowUp(type) {
+        const t = FOLLOWUPS[type] ? type : 'ring';
+        state.pendingFollowUp = { type: t };
+        state.chatHistory.push({ role: 'assistant', content: '（追问）' + FU(t).q.replace(/<[^>]+>/g, '') });
     }
 
     function getApiKey() { return localStorage.getItem('deepseek_api_key') || ''; }
@@ -1173,29 +1212,30 @@
         let followBlock = '';
         if (followJudge && followJudge.j) {
             const j = followJudge.j;
+            const f = FU(followJudge.type);
             const stu = [];
-            if (j.ratio) stu.push(`ω₂/ω₁ 答「${dirName(j.ratio)}」（${j.okR ? '对' : '错，应为变小'}）`);
-            if (j.loss) stu.push(`损失率答「${dirName(j.loss)}」（${j.okL ? '对' : '错，应为变大'}）`);
+            if (j.ratio) stu.push(`ω₂/ω₁ 答「${dirName(j.ratio)}」（${j.okR ? '对' : `错，应为${dirName(f.truth.ratio)}`}）`);
+            if (j.loss) stu.push(`损失率答「${dirName(j.loss)}」（${j.okL ? '对' : `错，应为${dirName(f.truth.loss)}`}）`);
 
             const allRight = j.okR !== false && j.okL !== false;
             // 要求按"答对/答错"分别生成：绝不能把某个反例写死进通用指令，
             // 否则模型会把反例误当成学生的原话（曾导致把正确答案判成错）
             const reqLines = allRight
                 ? `- 学生两问都答对了，你的任务只是讲"为什么"，不要重复说"你答对了"；
-- 一句话讲清机制：I₂ 翻倍 → I₁/(I₁+I₂) 的分母变大 → 比值变小；损失率 = 1 − ω₂/ω₁，所以随之变大；
+- 一句话讲清机制：${f.explain}；
 - 严禁出现"不对""错了""但是""要分情况"这类否定或摇摆的表述，学生的结论是对的；`
-                : `- 学生至少有一问答错，直接指出是哪一问，并用 损失率 = 1 − ω₂/ω₁ 说明他的说法为什么站不住；
+                : `- 学生至少有一问答错，直接指出是哪一问，并说明这两式只由 I₁:I₂ 决定；
 - 不要含糊其辞地说"要分情况"，也别说"若固定某个比例则……"；`;
 
             followBlock = `
 【正在进行的追问（重要上下文）】
-- 你刚才问学生：${RING_Q}
-- 标准答案：ω₂/ω₁ 会「变小」，损失率会「变大」（空心圆环 I = MR² 是实心盘的 2 倍，I₂ 翻倍；而 ω₂/ω₁ = I₁/(I₁+I₂)、损失率 = I₂/(I₁+I₂)，都只由 I₁:I₂ 决定）
+- 你刚才问学生：${f.q.replace(/<[^>]+>/g, '')}
+- 标准答案：ω₂/ω₁ 会「${dirName(f.truth.ratio)}」，损失率会「${dirName(f.truth.loss)}」${f.why}
 - 学生的实际回答：${stu.join('；')}
 - 系统已经在界面上判过对错：${allRight ? '两问都答对' : '答错或只对一半'}
 【本轮回答要求】
 ${reqLines}
-- 不要报 0.333 / 66.7% 这类具体数值，让学生自己把 M₂ 调成 2 倍去验证；
+- 不要直接报数值，让学生自己按上面的验证路径做一遍；
 - 两句话说完，不超过 70 字。`;
         }
 
@@ -1216,17 +1256,14 @@ ${followBlock}
     }
 
     function getLocalQAAnswer(question, followJudge) {
-        // 追问的回答：直接用本地判向的结果，比通用知识库更接得上
+        // 追问的回答：直接用本地判向的结果和该问的标准解释，比通用知识库更接得上
         if (followJudge && followJudge.j) {
             const j = followJudge.j;
             const allRight = j.okR !== false && j.okL !== false;
-            return '换成空心圆环后，落盘 I₂ 变成 2 倍（圆环 I = MR²，实心盘 I = ½MR²）。'
-                + 'ω₂/ω₁ = I₁/(I₁+I₂) 的分母变大，所以比值<b>变小</b>；'
-                + '损失率 = I₂/(I₁+I₂) 则<b>变大</b>。'
+            return FU(followJudge.type).answer
                 + (allRight
-                    ? '两者本来就是 1 − ω₂/ω₁ 的关系，你的两句话是一致的。'
-                    : '注意：两者恰好是 1 − ω₂/ω₁ 的关系，所以不可能一个不变、另一个变。')
-                + '想亲眼看到的话，把 M₂ 调成 2 倍重跑一次。';
+                    ? ''
+                    : '<br><span style="color:#8a6d3b;">提示：这两个结果只由 I₁:I₂ 的比例决定，比值和损失率加起来恒等于 1，可以互相校验。</span>');
         }
 
         const q = String(question || '').toLowerCase().replace(/\s+/g, '');
@@ -1248,8 +1285,12 @@ ${followBlock}
                 a: '角动量守恒不等于动能守恒。两盘刚接触时存在相对滑动，滑动摩擦力做负功，把一部分机械能转成内能（发热）。损失量 ΔE = ½·I₁I₂/(I₁+I₂)·ω₁²，损失率 = I₂/(I₁+I₂)。'
             },
             {
-                keys: ['空心', '圆环', '圆筒', '变大', '变小'],
-                a: '换成空心圆环后，落盘的 I₂ 变成 2 倍（圆环 I = MR²，实心盘 I = ½MR²）。由 ω₂/ω₁ = I₁/(I₁+I₂) 可知比值会<b>变小</b>，由损失率 = I₂/(I₁+I₂) 可知损失率会<b>变大</b>——惯量越大的盘被"带起来"越费劲，也分走更多转速。结论的形式没变，只是 I 的算法换成 MR²。'
+                keys: ['薄壁', '空心圆环', '圆环', '圆筒', '变成圆环', '变大', '变小'],
+                a: '薄壁空心圆环的质量全集中在外圈，I = MR²，是同样质量、半径的实心盘的 2 倍。由 ω₂/ω₁ = I₁/(I₁+I₂) 可知比值会<b>变小</b>，由损失率 = I₂/(I₁+I₂) 可知损失率会<b>变大</b>——惯量越大的盘被"带起来"越费劲，也分走更多转速。结论的形式没变，只是 I 的算法换成 MR²。'
+            },
+            {
+                keys: ['空心圆盘', '厚环', '厚壁', '内半径', 'r和r', '环形圆盘'],
+                a: '空心圆盘（内半径 r、外半径 R 的厚环）的转动惯量是 I = ½M(R²+r²)，质量分布在 r 到 R 之间。因为 r < R，所以 ½(R²+r²) 介于 ½R²（实心盘）和 R²（薄壁圆环）之间：同样质量、外半径下，它比薄壁圆环的 I 小，被带动得更"容易"，所以 ω₂/ω₁ 会比薄壁圆环时<b>大</b>、损失率<b>小</b>；r → R 时退化成薄壁圆环，r → 0 时退化成实心盘。'
             },
             {
                 keys: ['k是', '过渡', '耦合速度', '收敛', '曲线为什么'],
@@ -1503,8 +1544,8 @@ ${followBlock}
         pushMessage('ai', evaluation.localMsg);
 
         if (evaluation.overall !== 'wrong') {
-            // 判对：追问空心圆环，并把追问挂起（文本也进对话历史，模型才知道在回答什么）
-            armFollowUp();
+            // 判对：追问薄壁空心圆环，并把追问挂起（文本也进对话历史，模型才知道在回答什么）
+            armFollowUp('ring');
         }
         // 判错：误差 + 诊断 + 完整正确过程 + 鼓励重试，上面那条消息已经说完了。
         // 以前这里还会再调一次模型，让它复述"两问误差差得太多…先查较差的那一问"，
@@ -1530,12 +1571,13 @@ ${followBlock}
         pushMessage('user', q);
         state.chatHistory.push({ role: 'user', content: q });
 
-        // 如果正在追问"空心圆环"，先本地判方向：判得出来就把结论写进回答里，
+        // 如果正在追问，先本地判方向：判得出来就把结论写进回答里，
         // 模型只负责讲原因，不会再出现"要分情况"这种和稀泥的回答
         let followJudge = null;
-        if (state.pendingFollowUp) {
-            const j = judgeRingAnswer(q);
-            if (j) followJudge = { j };
+        const pendType = state.pendingFollowUp ? state.pendingFollowUp.type : null;
+        if (pendType) {
+            const j = judgeFollowUp(q, pendType);
+            if (j) followJudge = { j, type: pendType };
             state.pendingFollowUp = null;
         }
 
@@ -1543,12 +1585,23 @@ ${followBlock}
         try {
             const result = await askAIForQuestion(q, followJudge);
             const sourceTag = result.source === 'cloud' ? '' : '（离线）';
-            const judgeHTML = followJudge ? buildRingJudgeHTML(followJudge.j) + '<br><br>' : '';
+            const judgeHTML = followJudge ? buildFollowJudgeHTML(followJudge.j, followJudge.type) + '<br><br>' : '';
             pushMessage('ai', judgeHTML + result.text + sourceTag);
             state.chatHistory.push({
                 role: 'assistant',
                 content: (followJudge ? '（系统判定）' + judgeHTML.replace(/<[^>]+>/g, '') + ' ' : '') + result.text
             });
+
+            // 这一问全答对且还有下一问 → 顺势追问下一层
+            if (followJudge && followJudge.j.okR !== false && followJudge.j.okL !== false) {
+                const nextType = FU(followJudge.type).next;
+                if (nextType) {
+                    setTimeout(() => {
+                        pushMessage('ai', followUpHTML(nextType));
+                        armFollowUp(nextType);
+                    }, 350);
+                }
+            }
         } catch (err) {
             pushMessage('ai', '抱歉，这次提问没能完成，请稍后再试。');
         } finally {
