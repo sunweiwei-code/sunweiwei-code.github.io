@@ -1117,6 +1117,19 @@
         if (DIR_DOWN.test(txt)) return 'down';
         return null;
     }
+    // 一句话里可能连着说两个方向（"变小变大"/"变小 变大"），按出现顺序全部取出来
+    const DIR_RE = /变大|增大|升高|上升|提高|增加|更大|更高|变小|减小|降低|下降|减少|更小|更低|不变|一样|相同|保持/g;
+    function dirsOf(txt) {
+        const out = [];
+        DIR_RE.lastIndex = 0;
+        let m;
+        while ((m = DIR_RE.exec(txt))) {
+            const w = m[0];
+            out.push(/不变|一样|相同|保持/.test(w) ? 'same'
+                : (/变大|增大|升高|上升|提高|增加|更大|更高/.test(w) ? 'up' : 'down'));
+        }
+        return out;
+    }
     const dirName = d => d === 'up' ? '变大' : d === 'down' ? '变小' : d === 'same' ? '不变' : '—';
 
     // 返回 { ratio, loss, okR, okL } 或 null（看不出方向就不判，交给正常问答）
@@ -1124,18 +1137,32 @@
         const truth = FU(type).truth;
         const clauses = String(text || '')
             .replace(/\s+/g, '')
-            .split(/[，,。；;、！!？?]/)
+            .split(/[，,。；;、！!？?\/／]/)
             .filter(Boolean);
         let ratio = null, loss = null;
+        const bare = [];                       // 只给了方向、没带主语的句子
         for (const c of clauses) {
-            const d = dirOf(c);
-            if (!d) continue;
+            const dirs = dirsOf(c);
+            if (!dirs.length) continue;
             const hasLoss = SUBJ_LOSS.test(c);
             const hasRatio = SUBJ_RATIO.test(c);
-            if (hasLoss && !hasRatio) { if (!loss) loss = d; }
-            else if (hasRatio && !hasLoss) { if (!ratio) ratio = d; }
-            // 一句话里两个都提到、或没主语 → 不猜，避免误判
+            if (hasLoss && !hasRatio) { if (!loss) loss = dirs[0]; }
+            else if (hasRatio && !hasLoss) { if (!ratio) ratio = dirs[0]; }
+            else if (!hasLoss && !hasRatio) { dirs.forEach(d => bare.push(d)); }
+            // 一句话里两个都提到 → 不猜，避免误判
         }
+
+        // 题干顺序固定是"ω₂/ω₁ 和损失率"，所以光答"变小，变大"也能按位置归位
+        if (bare.length) {
+            if (!ratio && !loss) {
+                if (bare.length >= 2) { ratio = bare[0]; loss = bare[1]; }
+            } else if (ratio && !loss) {
+                loss = bare[0];
+            } else if (!ratio && loss) {
+                ratio = bare[0];
+            }
+        }
+
         if (!ratio && !loss) {
             // "都/两者/均"这种统称，方向对两问同时成立
             const flat = String(text || '').replace(/\s+/g, '');
